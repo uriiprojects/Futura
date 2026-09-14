@@ -179,6 +179,17 @@
     .mtbl td{min-width:52px;font-size:11px;padding:7px 2px;}
     .ftbl{font-size:11.5px;}
   }
+  @media print{
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
+    .no-print, .quote-persona-row, .quote-download-btn, .toggle-mini{display:none!important;}
+    body{background:#fff;padding:0;}
+    .page{max-width:100%;}
+    .header{border:none;padding:0 0 12px 0;margin-bottom:12px;}
+    .card, .inv-card, .quote-card{border:1px solid #ccc!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid;margin-bottom:14px;}
+    .quote-card{background:#161512!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;}
+    canvas{max-width:100%;}
+  }
 </style>
 </head>
 <body>
@@ -190,7 +201,7 @@
   </div>
 
   <!-- MIS PROYECTOS -->
-  <div class="card">
+  <div class="card no-print">
     <p class="card-title">Mis proyectos</p>
     <div id="projectList"></div>
     <div class="fields-2" style="margin-top:8px;align-items:end">
@@ -231,10 +242,11 @@
     <div class="quote-meta" id="quoteMeta"></div>
     <div class="quote-disclaimer">Cifras estimadas con fines ilustrativos, calculadas sobre el escenario y plazo seleccionados abajo. No constituyen garantía de rentabilidad — sujetas a validación final del proyecto.</div>
     <button class="quote-download-btn" type="button" onclick="downloadQuoteImage()">↓ Descargar imagen para enviar</button>
+    <button class="quote-download-btn no-print" type="button" style="margin-top:8px;background:transparent;color:#f2f0ea;border:1px solid rgba(255,255,255,.4)" onclick="window.print()">↓ Descargar reporte completo (PDF)</button>
   </div>
 
   <!-- LOTE -->
-  <div class="card">
+  <div class="card no-print">
     <p class="card-title">Lote y áreas</p>
     <div class="toggle-row">
       <div>
@@ -287,7 +299,7 @@
   </div>
 
   <!-- COSTOS -->
-  <div class="card">
+  <div class="card no-print">
     <p class="card-title">Costos y honorarios</p>
     <div class="toggle-row">
       <div><div class="toggle-label">Costo directo como total</div><div class="toggle-sub">Apagado = ingresas $/m². Encendido = ingresas el total directo.</div></div>
@@ -314,7 +326,7 @@
   </div>
 
   <!-- CAPÍTULOS DE DESEMBOLSO -->
-  <div class="card">
+  <div class="card no-print">
     <p class="card-title">Capítulos de desembolso</p>
     <p class="card-sub">El capital puede entrar desde la adquisición del lote, desde el licenciamiento, o solo a financiar obra (proyecto ya licenciado).</p>
 
@@ -347,7 +359,7 @@
   </div>
 
   <!-- ESCENARIOS DE VENTA -->
-  <div class="card">
+  <div class="card no-print">
     <p class="card-title">Escenarios de venta ($/m²)</p>
     <div class="fields-3">
       <div class="field"><label>Conservador (millones $/m²)</label><input type="number" id="precioConservador" value="5.2" step="0.05"></div>
@@ -409,7 +421,7 @@
   <!-- HURDLE RATE -->
   <div class="card">
     <p class="card-title">TIR proyectada vs tasa de referencia</p>
-    <div class="field" style="max-width:220px;margin-bottom:12px"><label>Tasa de referencia / hurdle rate (% EA)</label><input type="number" id="hurdlePct" value="12" step="0.5"></div>
+    <div class="field no-print" style="max-width:220px;margin-bottom:12px"><label>Tasa de referencia / hurdle rate (% EA)</label><input type="number" id="hurdlePct" value="12" step="0.5"></div>
     <div style="position:relative;height:170px;"><canvas id="hurdleChart"></canvas></div>
     <p class="note">Compara la TIR del capital nuevo en cada escenario (al mes de venta actual) contra la tasa mínima que justifica el riesgo.</p>
   </div>
