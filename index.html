@@ -181,15 +181,18 @@
   }
   @page{
     size:auto;
-    margin:12mm 14mm;
+    margin:14mm 14mm;
   }
   @media print{
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
     .no-print, .print-hide, .quote-persona-row, .quote-download-btn, .toggle-mini{display:none!important;}
     body{background:#fff;padding:0;}
-    .page{max-width:100%;}
+    .page{max-width:100%;padding:6mm 8mm;box-sizing:border-box;}
+    .card, .quote-card{padding:1.6rem 1.9rem!important;}
+    .ftbl td, .schtbl td{padding-top:6px!important;padding-bottom:6px!important;}
+    .mtbl td{padding:11px 4px!important;}
     .header{border:none;padding:0 0 12px 0;margin-bottom:12px;}
-    .card, .inv-card, .quote-card{border:1px solid #ccc!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid;margin-bottom:14px;}
+    .card, .inv-card, .quote-card{border:1px solid #ccc!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid;margin-bottom:18px;}
     .quote-card{background:#161512!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
     .two-col{display:grid;grid-template-columns:1fr 1fr;}
     canvas{max-width:100%;}
