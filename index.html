@@ -282,6 +282,10 @@
         <div class="field" id="loteAdjMesCustomWrap" style="display:none"><label>Mes personalizado</label><input type="number" id="loteAdjudicacionMesCustom" value="6" step="1" min="0"></div>
       </div>
       <p class="card-sub" style="margin-top:6px;margin-bottom:0">Desde cuándo se considera "en riesgo" el capital del lote para calcular su TIR. No cambia el monto ni la prorrata — solo el punto de partida del reloj.</p>
+      <div class="fields-3" style="margin-top:12px">
+        <div class="field"><label>Caja previa del aportante (millones $)</label><input type="number" id="aportePrevio" value="0" step="10" min="0"></div>
+      </div>
+      <p class="card-sub" style="margin-top:6px;margin-bottom:0">Dinero adicional al lote que el aportante ya giró al proyecto (por ejemplo, preoperativos). Cuenta como capital previo: se descuenta de lo que levantan los cupos y entra a su TIR en el mes 0. Déjalo en 0 si no aplica.</p>
     </div>
 
     <div id="loteCompradoBlock" style="display:none">
@@ -509,6 +513,7 @@ function getVals(){
   return{
     loteAportado:bool('loteAportado'),
     loteValor:numM('loteValor'),
+    aportePrevio:bool('loteAportado')?numM('aportePrevio'):0,
     loteAreaM2:num('loteAreaM2'),
     loteFinanciaCapital:bool('loteFinanciaCapital'),
     loteModalidad:sel('loteModalidad'),
@@ -573,20 +578,21 @@ function buildSchedule(v,bc){
   }
   else if(!v.loteFinanciaCapital){bucketATotal+=v.loteValor;bucketASched.push([0,v.loteValor,'Lote (capital previo)']);}
   if(!v.licenciamientoFinanciaCapital){bucketATotal+=bc.licCost;bucketASched.push([0,bc.licCost,'Licenciamiento (capital previo)']);}
+  if(v.aportePrevio>0){bucketATotal+=v.aportePrevio;bucketASched.push([0,v.aportePrevio,'Caja previa (aportante de lote)']);}
 
   const bucketBSched=[];
   if(!v.loteAportado&&v.loteFinanciaCapital){
     bucketBSched.push(...buildLoteCuotas(v.loteValor,v.loteModalidad,v.loteNumCuotas,v.loteDuracionMeses,0,'Lote'));
   }
   // Licenciamiento + Obra: separación al inicio (financia licenciamiento), resto durante obra
-  const capitalLicObra=(v.licenciamientoFinanciaCapital?bc.licCost:0)+bc.directo;
+  const capitalLicObra=Math.max(0,(v.licenciamientoFinanciaCapital?bc.licCost:0)+bc.directo-v.aportePrevio);
   let separacionAmt=0;
   if(v.licenciamientoFinanciaCapital){
     separacionAmt=capitalLicObra*(v.separacionPct/100);
     bucketBSched.push([t_lic_start,separacionAmt,'Separación (licenciamiento)']);
     bucketBSched.push(...buildEvenCuotas(capitalLicObra-separacionAmt,v.obraNumDesembolsos,v.fase2Meses,t_obra_start,'Obra'));
   }else{
-    bucketBSched.push(...buildEvenCuotas(bc.directo,v.obraNumDesembolsos,v.fase2Meses,t_obra_start,'Obra'));
+    bucketBSched.push(...buildEvenCuotas(Math.max(0,bc.directo-v.aportePrevio),v.obraNumDesembolsos,v.fase2Meses,t_obra_start,'Obra'));
   }
   const bucketBTotal=bc.costoTotal-bucketATotal;
 
@@ -598,6 +604,7 @@ function irrForLoteMonth(v,bc,retornoA,mesVenta,loteMonth){
   if(!v.loteAportado||v.loteValor<=0)return null;
   const sched=[[loteMonth,v.loteValor]];
   if(!v.licenciamientoFinanciaCapital)sched.push([0,bc.licCost]);
+  if(v.aportePrevio>0)sched.push([0,v.aportePrevio]);
   const m=calcIRR(buildCFs(mesVenta,sched,retornoA));
   return m!==null?Math.pow(1+m,12)-1:null;
 }
@@ -843,6 +850,7 @@ function render(){
     const incl=[];
     if(v.loteAportado||!v.loteFinanciaCapital)incl.push('lote');
     if(!v.licenciamientoFinanciaCapital)incl.push('licenciamiento');
+    if(v.aportePrevio>0)incl.push('caja previa');
     let cmpHtml='';
     if(v.loteAportado){
       const cmpMes0=irrForLoteMonth(v,bc,r.retornoA,month,0);
@@ -890,11 +898,12 @@ function render(){
     const loteMonth=v.loteAportado?(v.loteAdjudicacionModo==='obra'?r.sched.t_obra_start:(v.loteAdjudicacionModo==='custom'?v.loteAdjudicacionMesCustom:0)):0;
     document.getElementById('quotePayPlan').innerHTML=`
       <div class="quote-payplan-title">Flujo de caja estimado</div>
-      <div class="quote-pay-row"><span class="quote-pay-month">Mes ${loteMonth} · Aporte del lote</span><span class="quote-pay-amt">${fB(r.sched.bucketATotal)}</span></div>
+      ${v.aportePrevio>0?`<div class="quote-pay-row"><span class="quote-pay-month">Mes 0 · Caja previa</span><span class="quote-pay-amt">${fB(v.aportePrevio)}</span></div>`:''}
+      <div class="quote-pay-row"><span class="quote-pay-month">Mes ${loteMonth} · Aporte del lote</span><span class="quote-pay-amt">${fB(r.sched.bucketATotal-(v.aportePrevio||0))}</span></div>
       <div class="quote-pay-row"><span class="quote-pay-month">Mes ${month} · Retorno a la venta</span><span class="quote-pay-amt">${fB(r.retornoA)}</span></div>
       <div class="quote-pay-total"><span class="quote-pay-month">Utilidad neta</span><span class="quote-pay-amt">${fB(r.retornoA-r.sched.bucketATotal)}</span></div>`;
     document.getElementById('quoteGrid').innerHTML=[
-      ['Aporte (lote)', fB(r.sched.bucketATotal)],
+      [v.aportePrevio>0?'Aporte previo (lote + caja)':'Aporte (lote)', fB(r.sched.bucketATotal)],
       ['Retorno esperado', fB(r.retornoA)],
       ['Múltiplo', mx(r.aMul)],
       ['Plazo estimado', month+' meses'],
@@ -926,7 +935,7 @@ function render(){
       ['Plazo estimado', month+' meses'],
     ].map(([l,val])=>`<div><div class="quote-stat-l">${l}</div><div class="quote-stat-v">${val}</div></div>`).join('');
     document.getElementById('quoteMeta').textContent=
-      `Escenario ${activeScenario.charAt(0).toUpperCase()+activeScenario.slice(1)} · Precio de venta ${fB(price)}/m² · Área vendible ${v.areaVendible} m² · ${v.numCupos} cupos disponibles`;
+      `Escenario ${activeScenario.charAt(0).toUpperCase()+activeScenario.slice(1)} · Precio de venta ${fB(price)}/m² · Área vendible ${v.areaVendible} m² · ${v.numCupos} cupos disponibles${v.aportePrevio>0?' · Valor por cupo descuenta el aporte previo del lote y la caja':''}`;
   }
 
   // Chart
@@ -993,10 +1002,11 @@ function render(){
   document.getElementById('assumptionsNote').innerHTML=
     `<strong>Supuestos:</strong> costo total = lote + directo + indirecto + fee estructuración + fee venta (ambos fees % sobre costo). `+
     `Timeline: Lote${v.loteAportado?'':' ('+v.loteDuracionMeses+'m)'} → Licenciamiento (${v.fase1Meses}m, separación ${v.separacionPct}% al inicio) → Obra (${v.fase2Meses}m, resto en ${v.obraNumDesembolsos} desembolsos). `+
-    `Cierre = notariales + timbre + comisión, sobre precio bruto. Fee gestor = ${v.feeGestorPct}% de la utilidad. Duración total hasta fin de obra: ${sched.totalDuration} meses. Costo total: ${fB(bc.costoTotal)}.`;
+    `Cierre = notariales + timbre + comisión, sobre precio bruto. Fee gestor = ${v.feeGestorPct}% de la utilidad. Duración total hasta fin de obra: ${sched.totalDuration} meses. Costo total: ${fB(bc.costoTotal)}.`+
+    (v.aportePrevio>0?` Capital previo incluye caja adicional del aportante por ${fB(v.aportePrevio)}; el valor por cupo = (costo total − lote − caja previa) / ${v.numCupos}.`:'');
 }
 
-['loteAportado','loteValor','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
+['loteAportado','loteValor','aportePrevio','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
  'areaVendible','costoDirectoM2','costoDirectoTotal','costoIndirectoPct',
  'feeEstructPct','feeVentaPct','notarialPct','timbrePct','comisionPct','feeGestorPct',
  'licenciamientoFinanciaCapital','separacionPct',
@@ -1007,7 +1017,7 @@ function render(){
 document.getElementById('ms').addEventListener('input',render);
 
 // ---- Proyectos guardados (Google Sheets vía Apps Script) ----
-const PROJECT_FIELD_IDS=['loteAportado','loteValor','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
+const PROJECT_FIELD_IDS=['loteAportado','loteValor','aportePrevio','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
  'areaVendible','costoDirectoModo','costoDirectoM2','costoDirectoTotal','costoIndirectoPct',
  'feeEstructPct','feeVentaPct','notarialPct','timbrePct','comisionPct','feeGestorPct',
  'licenciamientoFinanciaCapital','separacionPct',
@@ -1026,6 +1036,7 @@ function collectFormData(){
   return data;
 }
 function applyFormData(data){
+  document.getElementById('aportePrevio').value=0; // proyectos guardados antes de este campo
   Object.keys(data).forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
