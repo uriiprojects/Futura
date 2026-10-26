@@ -185,7 +185,7 @@
   }
   @media print{
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
-    .no-print, .quote-persona-row, .quote-download-btn, .toggle-mini{display:none!important;}
+    .no-print, .print-hide, .quote-persona-row, .quote-download-btn, .toggle-mini{display:none!important;}
     body{background:#fff;padding:0;}
     .page{max-width:100%;}
     .header{border:none;padding:0 0 12px 0;margin-bottom:12px;}
@@ -246,7 +246,7 @@
     <div class="quote-meta" id="quoteMeta"></div>
     <div class="quote-disclaimer">Cifras estimadas con fines ilustrativos, calculadas sobre el escenario y plazo seleccionados abajo. No constituyen garantía de rentabilidad — sujetas a validación final del proyecto.</div>
     <button class="quote-download-btn" type="button" onclick="downloadQuoteImage()">↓ Descargar imagen para enviar</button>
-    <button class="quote-download-btn no-print" type="button" style="margin-top:8px;background:transparent;color:#f2f0ea;border:1px solid rgba(255,255,255,.4)" onclick="window.print()">↓ Descargar reporte completo (PDF)</button>
+    <button class="quote-download-btn no-print" type="button" style="margin-top:8px;background:transparent;color:#f2f0ea;border:1px solid rgba(255,255,255,.4)" onclick="window.print()">↓ Descargar reporte (PDF)</button>
   </div>
 
   <!-- LOTE -->
@@ -360,7 +360,7 @@
   </div>
 
   <!-- LÍNEA DE TIEMPO -->
-  <div class="card">
+  <div class="card print-hide">
     <p class="card-title">Línea de tiempo del proyecto</p>
     <div class="timeline-wrap" id="timelineWrap"></div>
     <div class="timeline-legend" id="timelineLegend"></div>
@@ -388,7 +388,7 @@
   </div>
 
   <!-- KPIs POR M2 -->
-  <div class="card">
+  <div class="card print-hide">
     <p class="card-title">Indicadores por m²</p>
     <div class="kpi-grid">
       <div class="kpi"><div class="kpi-l">Costo / m²</div><div class="kpi-v" id="kpiCostoM2"></div></div>
@@ -411,23 +411,23 @@
   <div class="card">
     <p class="card-title">Ingresos y utilidad</p>
     <table class="ftbl" id="desgloseTable"></table>
-    <div class="summary2" id="utilSummary"></div>
+    <div class="summary2 print-hide" id="utilSummary"></div>
   </div>
 
   <!-- INVESTOR CARDS -->
-  <div class="two-col">
+  <div class="two-col print-hide">
     <div class="inv-card" id="cardPrevio"></div>
     <div class="inv-card" id="cardCapital"></div>
   </div>
 
   <!-- CHART -->
-  <div class="card">
+  <div class="card print-hide">
     <p class="card-title">Costo vs precio de venta por m² — 3 escenarios</p>
     <div style="position:relative;height:170px;"><canvas id="barChart"></canvas></div>
   </div>
 
   <!-- HURDLE RATE -->
-  <div class="card">
+  <div class="card print-hide">
     <p class="card-title">TIR proyectada vs tasa de referencia</p>
     <div class="field no-print" style="max-width:220px;margin-bottom:12px"><label>Tasa de referencia / hurdle rate (% EA)</label><input type="number" id="hurdlePct" value="12" step="0.5"></div>
     <div style="position:relative;height:170px;"><canvas id="hurdleChart"></canvas></div>
@@ -437,7 +437,7 @@
   <!-- MATRIX -->
   <div class="card">
     <div class="mat-header">
-      <p class="card-title" style="margin-bottom:0">Matriz escenario × mes de venta · TIR anual</p>
+      <p class="card-title" id="matTitle" style="margin-bottom:0">Matriz escenario × mes de venta · TIR anual · Capital nuevo</p>
       <div class="toggle-mini">
         <button class="tbtn on" id="btnMatCap" onclick="setMatMode('capital')">Capital nuevo</button>
         <button class="tbtn" id="btnMatLote" onclick="setMatMode('previo')">Previo</button>
@@ -667,6 +667,7 @@ function setScenario(s){
 }
 function setMatMode(m){
   matrixMode=m;
+  document.getElementById('matTitle').textContent='Matriz escenario × mes de venta · TIR anual · '+(m==='capital'?'Capital nuevo':'Capital previo');
   document.getElementById('btnMatCap').classList.toggle('on',m==='capital');
   document.getElementById('btnMatLote').classList.toggle('on',m==='previo');
   renderMatrix();
