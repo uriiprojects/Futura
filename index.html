@@ -652,11 +652,18 @@ function irrForLoteMonth(v,bc,retornoA,mesVenta,loteMonth){
   return m!==null?Math.pow(1+m,12)-1:null;
 }
 
+// Meses de venta que muestran la matriz y la tabla de deuda: al terminar la obra y hasta 15 meses después.
+// Una venta durante la obra se simula con el deslizador "Mes de venta".
+function mesesVentaMatriz(sched,v){
+  const fin=sched.totalDuration;
+  return[fin,fin+3,fin+6,fin+9,fin+12,fin+15];
+}
 function phaseLabel(m,sched,v){
   const obraEnd=sched.t_obra_start+v.fase2Meses;
   if(m<=sched.t_lic_start)return v.loteAportado?'Lote':'Cierre lote';
   if(m<=sched.t_obra_start)return'Licenc.';
-  if(m<=obraEnd)return'Obra';
+  if(m<obraEnd)return'En obra';
+  if(m===obraEnd)return'Fin de obra';
   return'+'+(m-obraEnd)+'m';
 }
 
@@ -814,7 +821,7 @@ function renderMatrix(){
   const bc=baseCosts(v);
   const sched=buildSchedule(v,bc);
   const baseDur=sched.totalDuration;
-  const months=[Math.max(3,baseDur-6),baseDur,baseDur+4,baseDur+8,baseDur+12,baseDur+20];
+  const months=mesesVentaMatriz(sched,v);
   const scenarios=[
     {label:'Conservador',price:numM('precioConservador')},
     {label:'Base',price:numM('precioBase')},
@@ -836,7 +843,7 @@ function renderMatrix(){
     h+='</tr>';
   });
   document.getElementById('matrixTable').innerHTML=h+'</tbody>';
-  document.getElementById('matNote').textContent='Filas = escenarios de precio. Columnas = mes de venta, con la fase del proyecto a la que corresponde ese mes.'+(v.loteDeuda?' ⚠ y celda atenuada = la venta cae después del plazo máximo de la deuda del lote (mes '+(sched.loteMonth+v.lotePlazoMax)+').':'');
+  document.getElementById('matNote').textContent='Filas = escenarios de precio. Columnas = mes de venta, con la fase del proyecto a la que corresponde ese mes. Para ver una venta durante la obra usa el deslizador "Mes de venta": supone cobrar el 100% del precio ese mes, así que es el mejor caso (la preventa real se cobra en cuotas).'+(v.loteDeuda?' ⚠ y celda atenuada = la venta cae después del plazo máximo de la deuda del lote (mes '+(sched.loteMonth+v.lotePlazoMax)+').':'');
 }
 
 function renderDeuda(v,r,month,price){
@@ -855,7 +862,7 @@ function renderDeuda(v,r,month,price){
     kp('Breakeven (mes '+month+')',fB(be)+'/m²')+
     kp('Precio mín. para TIR '+(hurdle*100).toFixed(0)+'%',pMin?fB(pMin)+'/m²':'No alcanzable',pMin&&price>=pMin?'s':'d');
   const sched=r.sched,baseDur=sched.totalDuration;
-  const meses=[...new Set([Math.max(3,baseDur),baseDur+2,baseDur+4,baseDur+6,baseDur+8,d.mesLimite].filter(m=>m>=3))].sort((a,b)=>a-b);
+  const meses=[...new Set(mesesVentaMatriz(sched,v).concat([d.mesLimite]).filter(m=>m>=3))].sort((a,b)=>a-b);
   let h='<thead><tr><th class="ph">Mes de venta</th><th>Intereses</th><th>Pago al lote</th><th>Breakeven $/m²</th><th>Mín. para TIR '+(hurdle*100).toFixed(0)+'%</th><th>TIR capital @ precio activo</th></tr></thead><tbody>';
   meses.forEach(m=>{
     const rr=calc(price,m,v);
