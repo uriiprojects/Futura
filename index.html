@@ -284,11 +284,36 @@
         </div>
         <div class="field" id="loteAdjMesCustomWrap" style="display:none"><label>Mes personalizado</label><input type="number" id="loteAdjudicacionMesCustom" value="6" step="1" min="0"></div>
       </div>
-      <p class="card-sub" style="margin-top:6px;margin-bottom:0">Desde cuándo se considera "en riesgo" el capital del lote para calcular su TIR. No cambia el monto ni la prorrata — solo el punto de partida del reloj.</p>
+      <p class="card-sub" style="margin-top:6px;margin-bottom:0">Desde cuándo se considera "en riesgo" el capital del lote para calcular su TIR. No cambia el monto ni la prorrata — solo el punto de partida del reloj. Si el lote es deuda, es el mes desde el que empieza a correr el interés.</p>
       <div class="fields-3" style="margin-top:12px">
         <div class="field"><label>Caja previa del aportante (millones $)</label><input type="number" id="aportePrevio" value="0" step="10" min="0"></div>
       </div>
       <p class="card-sub" style="margin-top:6px;margin-bottom:0">Dinero adicional al lote que el aportante ya giró al proyecto (por ejemplo, preoperativos). Cuenta como capital previo: se descuenta de lo que levantan los cupos y entra a su TIR en el mes 0. Déjalo en 0 si no aplica.</p>
+
+      <div class="toggle-row" style="margin-top:14px">
+        <div>
+          <div class="toggle-label">Lote como deuda (interés + plazo máximo)</div>
+          <div class="toggle-sub">El dueño del lote recibe capital + interés al vender, antes que los inversionistas de capital. No participa de la utilidad.</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="loteDeuda"><span class="slider-tog"></span></label>
+      </div>
+      <div id="loteDeudaBlock" style="display:none">
+        <div class="fields-3">
+          <div class="field"><label>Tasa de interés (% EA)</label><input type="number" id="loteTasa" value="15" step="0.5" min="0"></div>
+          <div class="field"><label>Base del interés</label>
+            <select id="loteInteresModo"><option value="compuesto">Compuesto (efectivo anual)</option><option value="simple">Simple (sobre capital)</option></select>
+          </div>
+          <div class="field"><label>Plazo máximo (meses)</label><input type="number" id="lotePlazoMax" value="24" step="1" min="1"></div>
+        </div>
+        <div class="toggle-row" style="margin-top:6px">
+          <div>
+            <div class="toggle-label">Cobrar fees de estructuración y venta sobre el lote</div>
+            <div class="toggle-sub">Apagado = los fees (% costo) se calculan solo sobre directo + indirecto</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="feesSobreLote" checked><span class="slider-tog"></span></label>
+        </div>
+        <p class="card-sub" style="margin-top:6px;margin-bottom:0">El interés corre desde el mes de adjudicación hasta la venta y se paga junto con el capital al vender. La deuda sale del ingreso neto antes de la utilidad: el fee gestor se calcula sobre la utilidad ya descontados los intereses y el lote queda fuera de la base de capital de los cupos. Si la venta pasa del plazo máximo, el cotizador lo marca con ⚠.</p>
+      </div>
     </div>
 
     <div id="loteCompradoBlock" style="display:none">
@@ -423,6 +448,14 @@
     <div class="inv-card" id="cardCapital"></div>
   </div>
 
+  <!-- DEUDA LOTE -->
+  <div class="card print-hide" id="deudaCard" style="display:none">
+    <p class="card-title">Lote como deuda · viabilidad</p>
+    <div class="kpi-grid" id="deudaKpis"></div>
+    <div class="mwrap" style="margin-top:12px"><table class="mtbl" id="deudaTable"></table></div>
+    <p class="note" id="deudaNote"></p>
+  </div>
+
   <!-- CHART -->
   <div class="card print-hide">
     <p class="card-title">Costo vs precio de venta por m² — 3 escenarios</p>
@@ -448,7 +481,7 @@
     </div>
     <div class="mwrap"><table class="mtbl" id="matrixTable"></table></div>
     <div class="legend-scale"><span>0%</span><div class="grad"></div><span>40%+</span></div>
-    <p class="note">Filas = escenarios de precio. Columnas = mes de venta, con la fase del proyecto a la que corresponde ese mes.</p>
+    <p class="note" id="matNote">Filas = escenarios de precio. Columnas = mes de venta, con la fase del proyecto a la que corresponde ese mes.</p>
   </div>
 
   <!-- SCHEDULE -->
@@ -524,6 +557,11 @@ function getVals(){
     loteDuracionMeses:Math.max(0,num('loteDuracionMeses')),
     loteAdjudicacionModo:sel('loteAdjudicacionModo'),
     loteAdjudicacionMesCustom:num('loteAdjudicacionMesCustom'),
+    loteDeuda:bool('loteAportado')&&bool('loteDeuda'),
+    loteTasa:num('loteTasa'),
+    loteInteresModo:sel('loteInteresModo'),
+    lotePlazoMax:Math.max(1,num('lotePlazoMax')),
+    feesSobreLote:!(bool('loteAportado')&&bool('loteDeuda'))||bool('feesSobreLote'),
     areaVendible:num('areaVendible'),
     costoDirectoModo:bool('costoDirectoModo')?'total':'m2',
     costoDirectoM2:numM('costoDirectoM2'),
@@ -549,8 +587,9 @@ function baseCosts(v){
   const directoM2=v.areaVendible>0?directo/v.areaVendible:0;
   const indirecto=directo*(v.costoIndirectoPct/100);
   const subtotal=v.loteValor+directo+indirecto;
-  const feeEstruct=subtotal*(v.feeEstructPct/100);
-  const feeVenta=subtotal*(v.feeVentaPct/100);
+  const feeBase=v.feesSobreLote===false?subtotal-v.loteValor:subtotal;
+  const feeEstruct=feeBase*(v.feeEstructPct/100);
+  const feeVenta=feeBase*(v.feeVentaPct/100);
   const costoTotal=subtotal+feeEstruct+feeVenta;
   const licCost=indirecto+feeEstruct+feeVenta;
   return{directo,directoM2,indirecto,feeEstruct,feeVenta,costoTotal,licCost};
@@ -574,10 +613,11 @@ function buildSchedule(v,bc){
 
   let bucketATotal=0;
   const bucketASched=[];
+  let loteMonth=0,loteDebtAmt=0;
   if(v.loteAportado){
-    bucketATotal+=v.loteValor;
-    const loteMonth=v.loteAdjudicacionModo==='obra'?t_obra_start:(v.loteAdjudicacionModo==='custom'?v.loteAdjudicacionMesCustom:0);
-    bucketASched.push([loteMonth,v.loteValor,'Lote (aportado)']);
+    loteMonth=v.loteAdjudicacionModo==='obra'?t_obra_start:(v.loteAdjudicacionModo==='custom'?v.loteAdjudicacionMesCustom:0);
+    if(v.loteDeuda){loteDebtAmt=v.loteValor;}
+    else{bucketATotal+=v.loteValor;bucketASched.push([loteMonth,v.loteValor,'Lote (aportado)']);}
   }
   else if(!v.loteFinanciaCapital){bucketATotal+=v.loteValor;bucketASched.push([0,v.loteValor,'Lote (capital previo)']);}
   if(!v.licenciamientoFinanciaCapital){bucketATotal+=bc.licCost;bucketASched.push([0,bc.licCost,'Licenciamiento (capital previo)']);}
@@ -597,9 +637,9 @@ function buildSchedule(v,bc){
   }else{
     bucketBSched.push(...buildEvenCuotas(Math.max(0,bc.directo-v.aportePrevio),v.obraNumDesembolsos,v.fase2Meses,t_obra_start,'Obra'));
   }
-  const bucketBTotal=bc.costoTotal-bucketATotal;
+  const bucketBTotal=bc.costoTotal-loteDebtAmt-bucketATotal;
 
-  return{bucketASched,bucketBSched,bucketATotal,bucketBTotal,t_lic_start,t_obra_start,
+  return{bucketASched,bucketBSched,bucketATotal,bucketBTotal,t_lic_start,t_obra_start,loteMonth,loteDebtAmt,
     totalDuration:t_obra_start+v.fase2Meses};
 }
 
@@ -620,11 +660,30 @@ function phaseLabel(m,sched,v){
   return'+'+(m-obraEnd)+'m';
 }
 
-function breakevenPrecioM2(v){
+function loteInteres(v,loteMonth,mesVenta){
+  if(!v.loteDeuda||v.loteValor<=0)return 0;
+  const t=Math.max(0,mesVenta-loteMonth);
+  return v.loteInteresModo==='simple'
+    ?v.loteValor*(v.loteTasa/100)*t/12
+    :v.loteValor*(Math.pow(1+v.loteTasa/100,t/12)-1);
+}
+function breakevenPrecioM2(v,mesVenta){
   const bc=baseCosts(v);
   const cierrePct=(v.notarialPct+v.timbrePct+v.comisionPct)/100;
   if(v.areaVendible<=0||cierrePct>=1)return 0;
-  return bc.costoTotal/(1-cierrePct)/v.areaVendible;
+  let extra=0;
+  if(v.loteDeuda&&mesVenta!=null){extra=loteInteres(v,buildSchedule(v,bc).loteMonth,mesVenta);}
+  return (bc.costoTotal+extra)/(1-cierrePct)/v.areaVendible;
+}
+// precio mínimo ($/m²) para que el capital nuevo alcance una TIR objetivo (EA) en un mes de venta dado
+function precioParaTIR(v,mesVenta,target){
+  const lo0=breakevenPrecioM2(v,mesVenta);
+  if(!(lo0>0))return null;
+  let lo=lo0,hi=lo0*4;
+  const f=p=>{const r=calc(p,mesVenta,v);return r.bIRR===null?-1:r.bIRR;};
+  if(f(hi)<target)return null;
+  for(let i=0;i<60;i++){const mid=(lo+hi)/2;if(f(mid)>=target)hi=mid;else lo=mid;}
+  return hi;
 }
 
 function calc(precioM2,mesVenta,v,bcOverride){
@@ -632,12 +691,25 @@ function calc(precioM2,mesVenta,v,bcOverride){
   const ventaTotal=v.areaVendible*precioM2;
   const gastosCierre=ventaTotal*((v.notarialPct+v.timbrePct+v.comisionPct)/100);
   const neto=ventaTotal-gastosCierre;
-  const utilidad=neto-bc.costoTotal;
-  const feeGestor=utilidad>0?utilidad*(v.feeGestorPct/100):0;
-  const pool=neto-feeGestor;
-
   const sched=buildSchedule(v,bc);
-  const aShare=bc.costoTotal>0?sched.bucketATotal/bc.costoTotal:0;
+  // Lote como deuda: capital + interés se paga al vender, antes de la utilidad y del capital de los cupos
+  const interes=loteInteres(v,sched.loteMonth,mesVenta);
+  const utilidad=neto-bc.costoTotal-interes;
+  const feeGestor=utilidad>0?utilidad*(v.feeGestorPct/100):0;
+  let deuda=null,pool=neto-feeGestor;
+  if(v.loteDeuda&&v.loteValor>0){
+    const deudaTotal=v.loteValor+interes;
+    const pagado=Math.max(0,Math.min(deudaTotal,neto));
+    const meses=Math.max(0,mesVenta-sched.loteMonth);
+    const m=calcIRR(buildCFs(mesVenta,[[sched.loteMonth,v.loteValor]],pagado));
+    deuda={principal:v.loteValor,interes,total:deudaTotal,pagado,meses,plazoMax:v.lotePlazoMax,
+      excede:meses>v.lotePlazoMax,mesLimite:sched.loteMonth+v.lotePlazoMax,loteMonth:sched.loteMonth,
+      irr:m!==null?Math.pow(1+m,12)-1:null,
+      mul:v.loteValor>0?pagado/v.loteValor:null};
+    pool=Math.max(0,neto-feeGestor-pagado);
+  }
+  const eqBase=bc.costoTotal-sched.loteDebtAmt;
+  const aShare=eqBase>0?sched.bucketATotal/eqBase:0;
   const bShare=1-aShare;
   const retornoA=aShare*pool;
   const retornoB=bShare*pool;
@@ -646,7 +718,7 @@ function calc(precioM2,mesVenta,v,bcOverride){
   const bm=sched.bucketBTotal>0?calcIRR(buildCFs(mesVenta,sched.bucketBSched,retornoB)):null;
 
   return{
-    ...bc,ventaTotal,gastosCierre,neto,utilidad,feeGestor,pool,
+    ...bc,ventaTotal,gastosCierre,neto,utilidad,feeGestor,pool,interes,deuda,
     aShare,bShare,retornoA,retornoB,
     profitable:utilidad>0,
     aIRR:am!==null?Math.pow(1+am,12)-1:null,
@@ -654,6 +726,7 @@ function calc(precioM2,mesVenta,v,bcOverride){
     aMul:sched.bucketATotal>0?retornoA/sched.bucketATotal:null,
     bMul:sched.bucketBTotal>0?retornoB/sched.bucketBTotal:null,
     costoM2:v.areaVendible>0?bc.costoTotal/v.areaVendible:0,
+    costoFinM2:v.areaVendible>0?(bc.costoTotal+interes)/v.areaVendible:0,
     ventaM2:v.areaVendible>0?ventaTotal/v.areaVendible:0,
     sched
   };
@@ -679,6 +752,14 @@ function setMatMode(m){
 document.getElementById('loteAportado').addEventListener('change',function(){
   document.getElementById('loteCompradoBlock').style.display=this.checked?'none':'block';
   document.getElementById('loteAportadoBlock').style.display=this.checked?'block':'none';
+  render();
+});
+document.getElementById('loteDeuda').addEventListener('change',function(){
+  document.getElementById('loteDeudaBlock').style.display=this.checked?'block':'none';
+  if(this.checked){ // la deuda corre desde el cierre por defecto
+    document.getElementById('loteAdjudicacionModo').value='0';
+    document.getElementById('loteAdjMesCustomWrap').style.display='none';
+  }
   render();
 });
 document.getElementById('loteAdjudicacionModo').addEventListener('change',function(){
@@ -746,14 +827,48 @@ function renderMatrix(){
     h+=`<tr><td class="pcol">${sc.label}<br><span style="font-weight:400;color:#9a9a96;font-size:11px">${fB(sc.price)}/m²</span></td>`;
     months.forEach(m=>{
       const r=calc(sc.price,m,v);
-      const irr=matrixMode==='capital'?r.bIRR:r.aIRR;
+      const irr=matrixMode==='capital'?r.bIRR:(r.deuda?r.deuda.irr:r.aIRR);
       const cs=cellStyle(irr);
       const active=Math.abs(m-month)<=1&&sc.label.toLowerCase()===activeScenario;
-      h+=`<td style="background:${cs.bg};color:${cs.text};${active?'outline:2.5px solid #1a1a18;outline-offset:-2px':''}">${irr!==null?pp(irr):'—'}</td>`;
+      const fuera=!!(r.deuda&&r.deuda.excede);
+      h+=`<td style="background:${cs.bg};color:${cs.text};${fuera?'opacity:.5;':''}${active?'outline:2.5px solid #1a1a18;outline-offset:-2px':''}">${fuera?'⚠ ':''}${irr!==null?pp(irr):'—'}</td>`;
     });
     h+='</tr>';
   });
   document.getElementById('matrixTable').innerHTML=h+'</tbody>';
+  document.getElementById('matNote').textContent='Filas = escenarios de precio. Columnas = mes de venta, con la fase del proyecto a la que corresponde ese mes.'+(v.loteDeuda?' ⚠ y celda atenuada = la venta cae después del plazo máximo de la deuda del lote (mes '+(sched.loteMonth+v.lotePlazoMax)+').':'');
+}
+
+function renderDeuda(v,r,month,price){
+  const card=document.getElementById('deudaCard');
+  if(!r.deuda){card.style.display='none';return;}
+  card.style.display='block';
+  const d=r.deuda,hurdle=num('hurdlePct')/100;
+  const be=breakevenPrecioM2(v,month);
+  const pMin=precioParaTIR(v,month,hurdle);
+  const kp=(l,val,cls)=>`<div class="kpi"><div class="kpi-l">${l}</div><div class="kpi-v ${cls||''}">${val}</div></div>`;
+  document.getElementById('deudaKpis').innerHTML=
+    kp('Intereses a la venta',fB(d.interes))+
+    kp('Pago total al lote',fB(d.pagado))+
+    kp('Plazo usado / máx.',d.meses+' / '+d.plazoMax+' m',d.excede?'d':'s')+
+    kp('Mes límite de venta','Mes '+d.mesLimite)+
+    kp('Breakeven (mes '+month+')',fB(be)+'/m²')+
+    kp('Precio mín. para TIR '+(hurdle*100).toFixed(0)+'%',pMin?fB(pMin)+'/m²':'No alcanzable',pMin&&price>=pMin?'s':'d');
+  const sched=r.sched,baseDur=sched.totalDuration;
+  const meses=[...new Set([Math.max(3,baseDur),baseDur+2,baseDur+4,baseDur+6,baseDur+8,d.mesLimite].filter(m=>m>=3))].sort((a,b)=>a-b);
+  let h='<thead><tr><th class="ph">Mes de venta</th><th>Intereses</th><th>Pago al lote</th><th>Breakeven $/m²</th><th>Mín. para TIR '+(hurdle*100).toFixed(0)+'%</th><th>TIR capital @ precio activo</th></tr></thead><tbody>';
+  meses.forEach(m=>{
+    const rr=calc(price,m,v);
+    const mp=precioParaTIR(v,m,hurdle);
+    const fuera=rr.deuda.excede;
+    const cs=cellStyle(rr.bIRR);
+    h+=`<tr style="${fuera?'opacity:.55':''}"><td class="pcol">${fuera?'⚠ ':''}Mes ${m}<br><span style="font-weight:400;color:#9a9a96;font-size:10px">${rr.deuda.meses} m de deuda</span></td>
+      <td>${fB(rr.interes)}</td><td>${fB(rr.deuda.pagado)}</td><td>${fB(breakevenPrecioM2(v,m))}</td>
+      <td>${mp?fB(mp):'—'}</td><td style="background:${cs.bg};color:${cs.text}">${pp(rr.bIRR)}</td></tr>`;
+  });
+  document.getElementById('deudaTable').innerHTML=h+'</tbody>';
+  document.getElementById('deudaNote').textContent=
+    'Precio mínimo = $/m² al que el capital nuevo alcanza la tasa de referencia (hurdle) del cuadro de TIR, con el lote pagado primero. Cada mes extra de deuda sube el precio que necesitas para cubrir el interés. ⚠ = venta después del plazo máximo.';
 }
 
 function render(){
@@ -776,15 +891,15 @@ function render(){
   document.getElementById('monthDisplay').textContent='Mes '+month+' · '+phaseLabel(month,r.sched,v);
 
   // KPIs
-  document.getElementById('kpiCostoM2').textContent=fB(r.costoM2);
+  document.getElementById('kpiCostoM2').textContent=fB(r.costoFinM2);
   document.getElementById('kpiVentaM2').textContent=fB(r.ventaM2);
-  const margenM2=r.ventaM2-r.costoM2;
+  const margenM2=r.ventaM2-r.costoFinM2;
   const kM=document.getElementById('kpiMargenM2');
   kM.textContent=fB(margenM2); kM.className='kpi-v '+(margenM2>=0?'s':'d');
   const kP=document.getElementById('kpiMargenPct');
   const margenPct=r.ventaM2>0?margenM2/r.ventaM2:0;
   kP.textContent=pp(margenPct); kP.className='kpi-v '+(margenPct>=0?'s':'d');
-  const breakeven=breakevenPrecioM2(v);
+  const breakeven=breakevenPrecioM2(v,month);
   document.getElementById('kpiBreakeven').textContent=fB(breakeven);
   const colchon=breakeven>0?(price-breakeven)/breakeven:0;
   const kC=document.getElementById('kpiColchon');
@@ -798,15 +913,17 @@ function render(){
     {l:'Fee estructuración',v:bc.feeEstruct,m2:v.areaVendible>0?bc.feeEstruct/v.areaVendible:0},
     {l:'Fee venta/promoción',v:bc.feeVenta,m2:v.areaVendible>0?bc.feeVenta/v.areaVendible:0},
   ];
+  if(r.deuda){costRows.push({l:'Intereses del lote ('+v.loteTasa+'% '+(v.loteInteresModo==='simple'?'simple':'EA')+', '+r.deuda.meses+' m)',v:r.interes,m2:v.areaVendible>0?r.interes/v.areaVendible:0});}
+  const costoTabla=bc.costoTotal+r.interes;
   const ventaBase=v.areaVendible*numM('precioBase');
   let ch=`<thead><tr><th style="text-align:left">Rubro</th><th>Valor</th><th>$/m²</th><th>% costo</th><th>% venta base</th></tr></thead><tbody>`;
   costRows.forEach(row=>{
-    const pctC=bc.costoTotal>0?row.v/bc.costoTotal*100:0;
+    const pctC=costoTabla>0?row.v/costoTabla*100:0;
     const pctV=ventaBase>0?row.v/ventaBase*100:0;
     ch+=`<tr><td>${row.l}</td><td>${fB(row.v)}</td><td>${fB(row.m2)}</td><td>${pctC.toFixed(1)}%</td><td>${pctV.toFixed(1)}%</td></tr>`;
   });
-  const totPctV=ventaBase>0?bc.costoTotal/ventaBase*100:0;
-  ch+=`<tr class="tot"><td>Costos totales</td><td>${fB(bc.costoTotal)}</td><td>${fB(r.costoM2)}</td><td>100.0%</td><td>${totPctV.toFixed(1)}%</td></tr></tbody>`;
+  const totPctV=ventaBase>0?costoTabla/ventaBase*100:0;
+  ch+=`<tr class="tot"><td>Costos totales${r.deuda?' (con intereses)':''}</td><td>${fB(costoTabla)}</td><td>${fB(r.costoFinM2)}</td><td>100.0%</td><td>${totPctV.toFixed(1)}%</td></tr></tbody>`;
   document.getElementById('costStructTable').innerHTML=ch;
 
   // Ingresos y utilidad
@@ -818,6 +935,7 @@ function render(){
     {sep:1},
     {l:'Ingresos netos',v:r.neto,b:1,pctBase:'venta'},
     {l:'Costos totales del proyecto',v:-bc.costoTotal,c:'d'},
+    r.deuda?{l:'Intereses del lote',v:-r.interes,c:'d'}:null,
     {sep:1},
     {l:'Utilidad neta',v:r.utilidad,c:r.profitable?'s':'d',b:1,pctBase:'costo'},
     r.profitable?{l:'Fee grupo promotor ('+v.feeGestorPct+'%)',v:-r.feeGestor,pctBase:'costo'}:null,
@@ -850,7 +968,22 @@ function render(){
 
   // Investor cards
   const cardA=document.getElementById('cardPrevio');
-  if(r.sched.bucketATotal>0){
+  if(r.deuda){
+    const d=r.deuda;
+    const otroPrevio=r.sched.bucketATotal>0?`<div class="inv-row" style="margin-top:4px;padding-top:8px;border-top:.5px dashed var(--border2)"><span style="color:#6b6b67">Otro capital previo (${fB(r.sched.bucketATotal)}) · TIR</span><span style="color:${irrTextColor(r.aIRR)}">${pp(r.aIRR)}</span></div>`:'';
+    cardA.innerHTML=`
+      <p class="inv-name">Aportante del lote · deuda</p>
+      <p class="inv-sub">${v.loteTasa}% ${v.loteInteresModo==='simple'?'simple':'EA'} · plazo máx. ${d.plazoMax} meses</p>
+      <span class="pill pill-w">${d.excede?'⚠ Excede el plazo':'Dentro del plazo'} · ${d.meses} de ${d.plazoMax} m</span>
+      <div class="inv-irr" style="color:${irrTextColor(d.irr)}">${pp(d.irr)}<span>TIR/año (EA)</span></div>
+      <div class="inv-div">
+        <div class="inv-row"><span style="color:#6b6b67">Capital (lote)</span><span>${fB(d.principal)}</span></div>
+        <div class="inv-row"><span style="color:#6b6b67">Intereses acumulados</span><span>${fB(d.interes)}</span></div>
+        <div class="inv-row"><span style="color:#6b6b67">Pago a la venta (mes ${month})</span><span style="font-weight:600">${fB(d.pagado)}</span></div>
+        <div class="inv-row"><span style="color:#6b6b67">Múltiplo</span><span>${mx(d.mul)}</span></div>
+        ${otroPrevio}
+      </div>`;
+  } else if(r.sched.bucketATotal>0){
     const incl=[];
     if(v.loteAportado||!v.loteFinanciaCapital)incl.push('lote');
     if(!v.licenciamientoFinanciaCapital)incl.push('licenciamiento');
@@ -893,11 +1026,27 @@ function render(){
     </div>`;
 
   // Quote card
-  const showPersonaToggle=r.sched.bucketATotal>0;
+  const showPersonaToggle=r.sched.bucketATotal>0||!!r.deuda;
   document.getElementById('quotePersonaRow').style.display=showPersonaToggle?'flex':'none';
   const persona=showPersonaToggle?quotePersona:'capital';
 
-  if(persona==='previo'){
+  if(persona==='previo'&&r.deuda){
+    const d=r.deuda;
+    document.getElementById('quoteHeroTIR').innerHTML=pp(d.irr);
+    document.getElementById('quotePayPlan').innerHTML=`
+      <div class="quote-payplan-title">Flujo de caja estimado</div>
+      <div class="quote-pay-row"><span class="quote-pay-month">Mes ${d.loteMonth} · Aporte del lote</span><span class="quote-pay-amt">${fB(d.principal)}</span></div>
+      <div class="quote-pay-row"><span class="quote-pay-month">Mes ${month} · Capital + intereses</span><span class="quote-pay-amt">${fB(d.pagado)}</span></div>
+      <div class="quote-pay-total"><span class="quote-pay-month">Intereses</span><span class="quote-pay-amt">${fB(d.pagado-d.principal)}</span></div>`;
+    document.getElementById('quoteGrid').innerHTML=[
+      ['Aporte (lote)', fB(d.principal)],
+      ['Retorno esperado', fB(d.pagado)],
+      ['Múltiplo', mx(d.mul)],
+      ['Plazo estimado', d.meses+' meses (máx. '+d.plazoMax+')'],
+    ].map(([l,val])=>`<div><div class="quote-stat-l">${l}</div><div class="quote-stat-v">${val}</div></div>`).join('');
+    document.getElementById('quoteMeta').textContent=
+      `Lote de ${v.loteAreaM2} m² aportado como deuda · ${v.loteTasa}% ${v.loteInteresModo==='simple'?'simple':'EA'} · se paga con capital e intereses al vender, antes que el capital de los cupos`;
+  } else if(persona==='previo'){
     document.getElementById('quoteHeroTIR').innerHTML=pp(r.aIRR);
     const loteMonth=v.loteAportado?(v.loteAdjudicacionModo==='obra'?r.sched.t_obra_start:(v.loteAdjudicacionModo==='custom'?v.loteAdjudicacionMesCustom:0)):0;
     document.getElementById('quotePayPlan').innerHTML=`
@@ -948,7 +1097,7 @@ function render(){
     {label:'Base',price:numM('precioBase')},
     {label:'Positivo',price:numM('precioPositivo')},
   ];
-  const cd=scenarios.map(sc=>({label:sc.label,costo:+(r.costoM2/1e6).toFixed(3),venta:+(sc.price/1e6).toFixed(3)}));
+  const cd=scenarios.map(sc=>({label:sc.label,costo:+(r.costoFinM2/1e6).toFixed(3),venta:+(sc.price/1e6).toFixed(3)}));
   if(chartInst)chartInst.destroy();
   chartInst=new Chart(document.getElementById('barChart'),{
     type:'bar',
@@ -994,6 +1143,7 @@ function render(){
   const allM={};
   sched.bucketASched.forEach(([m,val])=>{const k=Math.round(m);if(!allM[k])allM[k]={a:0,b:0};allM[k].a+=val;});
   sched.bucketBSched.forEach(([m,val])=>{const k=Math.round(m);if(!allM[k])allM[k]={a:0,b:0};allM[k].b+=val;});
+  if(v.loteDeuda&&v.loteValor>0){const k=Math.round(sched.loteMonth);if(!allM[k])allM[k]={a:0,b:0};allM[k].a+=v.loteValor;}
   let sh=`<thead><tr><th style="text-align:left">Mes</th><th>Previo</th><th>Capital nuevo</th><th>Total</th></tr></thead><tbody>`;
   let cumA=0,cumB=0;
   Object.keys(allM).sort((a,b)=>+a-+b).forEach(m=>{
@@ -1003,14 +1153,17 @@ function render(){
   sh+=`<tr class="total"><td>Total</td><td>${fB(cumA)}</td><td>${fB(cumB)}</td><td>${fB(cumA+cumB)}</td></tr></tbody>`;
   document.getElementById('scheduleTable').innerHTML=sh;
 
+  renderDeuda(v,r,month,price);
   document.getElementById('assumptionsNote').innerHTML=
     `<strong>Supuestos:</strong> costo total = lote + directo + indirecto + fee estructuración + fee venta (ambos fees % sobre costo). `+
     `Timeline: Lote${v.loteAportado?'':' ('+v.loteDuracionMeses+'m)'} → Licenciamiento (${v.fase1Meses}m, separación ${v.separacionPct}% al inicio) → Obra (${v.fase2Meses}m, resto en ${v.obraNumDesembolsos} desembolsos). `+
     `Cierre = notariales + timbre + comisión, sobre precio bruto. Fee gestor = ${v.feeGestorPct}% de la utilidad. Duración total hasta fin de obra: ${sched.totalDuration} meses. Costo total: ${fB(bc.costoTotal)}.`+
+    (v.loteDeuda?` <strong>Lote como deuda:</strong> ${fB(v.loteValor)} al ${v.loteTasa}% ${v.loteInteresModo==='simple'?'simple':'EA'} desde el mes ${sched.loteMonth}, plazo máximo ${v.lotePlazoMax} meses; capital + intereses se pagan al vender, antes que el capital nuevo. ${v.feesSobreLote?'Los fees (% costo) incluyen el lote.':'Los fees (% costo) NO incluyen el lote.'} El fee gestor se calcula sobre la utilidad después de intereses.`:'')+
     (v.aportePrevio>0?` Capital previo incluye caja adicional del aportante por ${fB(v.aportePrevio)}; el valor por cupo = (costo total − lote − caja previa) / ${v.numCupos}.`:'');
 }
 
 ['loteAportado','loteValor','aportePrevio','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
+ 'loteDeuda','loteTasa','loteInteresModo','lotePlazoMax','feesSobreLote',
  'areaVendible','costoDirectoM2','costoDirectoTotal','costoIndirectoPct',
  'feeEstructPct','feeVentaPct','notarialPct','timbrePct','comisionPct','feeGestorPct',
  'licenciamientoFinanciaCapital','separacionPct',
@@ -1022,6 +1175,7 @@ document.getElementById('ms').addEventListener('input',render);
 
 // ---- Proyectos guardados (Google Sheets vía Apps Script) ----
 const PROJECT_FIELD_IDS=['loteAportado','loteValor','aportePrevio','loteAreaM2','loteFinanciaCapital','loteModalidad','loteNumCuotas','loteDuracionMeses','loteAdjudicacionModo','loteAdjudicacionMesCustom',
+ 'loteDeuda','loteTasa','loteInteresModo','lotePlazoMax','feesSobreLote',
  'areaVendible','costoDirectoModo','costoDirectoM2','costoDirectoTotal','costoIndirectoPct',
  'feeEstructPct','feeVentaPct','notarialPct','timbrePct','comisionPct','feeGestorPct',
  'licenciamientoFinanciaCapital','separacionPct',
@@ -1041,6 +1195,8 @@ function collectFormData(){
 }
 function applyFormData(data){
   document.getElementById('aportePrevio').value=0; // proyectos guardados antes de este campo
+  document.getElementById('loteDeuda').checked=false; // proyectos guardados antes de la opción de deuda
+  document.getElementById('feesSobreLote').checked=true;
   Object.keys(data).forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
@@ -1049,6 +1205,7 @@ function applyFormData(data){
   document.getElementById('loteCompradoBlock').style.display=document.getElementById('loteAportado').checked?'none':'block';
   document.getElementById('loteAportadoBlock').style.display=document.getElementById('loteAportado').checked?'block':'none';
   document.getElementById('loteAdjMesCustomWrap').style.display=document.getElementById('loteAdjudicacionModo').value==='custom'?'grid':'none';
+  document.getElementById('loteDeudaBlock').style.display=document.getElementById('loteDeuda').checked?'block':'none';
   const isTotal=document.getElementById('costoDirectoModo').checked;
   document.getElementById('fieldDirectoM2Wrap').style.display=isTotal?'none':'grid';
   document.getElementById('fieldDirectoTotalWrap').style.display=isTotal?'grid':'none';
